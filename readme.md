@@ -99,6 +99,77 @@ console.log(error('Error!'));
 console.log(warning('Warning!'));
 ```
 
+Or register named themes and switch between them at runtime:
+
+```js
+import chalk from 'chalk';
+
+chalk.defineTheme('light', {
+	primary: chalk.blue,
+	error: chalk.red,
+	success: chalk.green,
+});
+
+chalk.defineTheme('dark', {
+	primary: chalk.cyan,
+	error: chalk.redBright,
+	success: chalk.greenBright,
+});
+
+chalk.theme('dark');
+console.log(chalk.theme().primary('Hello!'));
+```
+
+A theme value can be any Chalk style — not just a foreground color. Use
+`bg`-prefixed keys for backgrounds and any modifier (`chalk.bold`,
+`chalk.italic`, `chalk.underline`) for text styles:
+
+```js
+import chalk from 'chalk';
+
+chalk.defineTheme('app', {
+	// Foreground colors
+	primary: chalk.blue,
+	error: chalk.red,
+	success: chalk.green,
+
+	// Background colors
+	bgHeader: chalk.bgBlue,
+	bgError: chalk.bgRed,
+
+	// Modifiers (text styles)
+	strong: chalk.bold,
+	emphasis: chalk.italic,
+	underline: chalk.underline,
+
+	// Chained styles are also fine
+	warning: chalk.yellow.bold,
+});
+
+chalk.theme('app');
+console.log(chalk.theme().primary('Title'));
+console.log(chalk.theme().bgHeader(' Header '));
+console.log(chalk.theme().strong('Important'));
+console.log(chalk.theme().warning('Careful!'));
+```
+
+The key names are free-form — pick anything that makes sense for your app
+(`text`/`bgText`, `header`/`bgHeader`, `success`/`bgSuccess`, …). Calling
+`defineTheme` again with the same name merges new keys into the existing
+theme, so you can grow a theme incrementally:
+
+```js
+chalk.defineTheme('app', {primary: chalk.blue});
+chalk.defineTheme('app', {bgPrimary: chalk.bgBlue}); // adds a key, keeps `primary`
+```
+
+Themes are scoped to a `Chalk` instance. Pass `null` to `theme()` to clear the active theme:
+
+```js
+chalk.theme(null);
+console.log(chalk.theme()); //=> undefined
+```
+
 Take advantage of console.log [string substitution](https://nodejs.org/docs/latest/api/console.html#console_console_log_data_args):
 
 ```js
@@ -141,6 +212,47 @@ const customChalk = new Chalk({level: 0});
 | `3` | Truecolor support (16 million colors) |
 
 Both the `level` option and the `level` property throw for anything that is not an integer from 0 to 3. Omit the option, or pass `undefined`, to have the level detected instead.
+
+### chalk.defineTheme(name, styles)
+
+Register or update a named theme on the current `Chalk` instance. `styles` is a plain object whose values can be any Chalk style — built-in colors, chained modifiers, hex/rgb/ansi256 styles, **background-color variants** (`chalk.bgRed`, `chalk.bgHex('#FF0000')`), and **modifiers** (`chalk.bold`, `chalk.italic`, `chalk.underline`). Key names are free-form.
+
+Calling `defineTheme` with the same name merges new keys into the existing theme — useful when you want to add to a theme incrementally:
+
+```js
+import chalk from 'chalk';
+
+chalk.defineTheme('light', {
+	primary: chalk.blue,
+	error: chalk.red,
+});
+
+// Later — adds `bgHeader` without losing `primary` and `error`.
+chalk.defineTheme('light', {bgHeader: chalk.bgBlue});
+```
+
+### chalk.theme(name)
+
+Activate a theme previously registered with [`defineTheme`](#chalkdefinethemename-styles). Returns the instance for chaining.
+
+```js
+chalk.theme('light');
+```
+
+### chalk.theme()
+
+Returns the active theme's styles as an object. Each key is a function (or value) that was registered with `defineTheme`. Returns `undefined` if no theme is active.
+
+```js
+chalk.theme('light');
+console.log(chalk.theme().primary('Hello'));
+```
+
+### chalk.theme(null)
+
+Clear the active theme. Subsequent `chalk.theme()` calls return `undefined`.
+
+Themes are scoped per `Chalk` instance — `new Chalk()` starts with no themes registered and no theme active, so different instances can carry independent palettes.
 
 ### supportsColor
 

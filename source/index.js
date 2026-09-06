@@ -11,6 +11,8 @@ const GENERATOR = Symbol('GENERATOR');
 const STYLER = Symbol('STYLER');
 const IS_EMPTY = Symbol('IS_EMPTY');
 const LEVEL = Symbol('LEVEL');
+const THEMES = Symbol('THEMES');
+const ACTIVE_THEME = Symbol('ACTIVE_THEME');
 
 const styles = Object.create(null);
 
@@ -18,6 +20,31 @@ const assertValidLevel = level => {
 	if (!Number.isSafeInteger(level) || level < 0 || level > 3) {
 		throw new Error('The `level` should be an integer from 0 to 3');
 	}
+};
+
+const assertValidThemeName = name => {
+	if (typeof name !== 'string' || name.length === 0) {
+		throw new TypeError('Theme name must be a non-empty string');
+	}
+};
+
+const isPlainObject = value => {
+	if (value === null || typeof value !== 'object') {
+		return false;
+	}
+
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
+};
+
+const getActiveThemeAccessor = instance => {
+	const themes = instance[THEMES];
+	const activeName = instance[ACTIVE_THEME];
+	if (!themes || !activeName || !Object.hasOwn(themes, activeName)) {
+		return undefined;
+	}
+
+	return createThemeAccessor(themes[activeName]);
 };
 
 // The level is stored under a symbol so the hot path can read it as a plain property, while `level` itself is an accessor that rejects values the rest of the code could not handle.
@@ -83,6 +110,22 @@ styles.visible = {
 	},
 };
 
+const createThemeAccessor = themeStyles => {
+	const accessor = {};
+	for (const [key, style] of Object.entries(themeStyles)) {
+		Object.defineProperty(accessor, key, {
+			enumerable: true,
+			configurable: false,
+			get() {
+				return style;
+			},
+		});
+	}
+
+	Object.freeze(accessor);
+	return accessor;
+};
+
 // Resolve a color model to one converter per `level`, so that a call only has to look up the converter for the current level instead of re-deciding the model and level every time.
 const createModelConverters = (model, type) => {
 	const style = ansiStyles[type];
@@ -144,6 +187,45 @@ const proto = Object.defineProperties(
 			},
 			set(level) {
 				this[GENERATOR].level = level;
+			},
+		},
+		defineTheme: {
+			enumerable: true,
+			value(name, themeStyles) {
+				assertValidThemeName(name);
+				if (!isPlainObject(themeStyles)) {
+					throw new TypeError('Theme styles must be a plain object');
+				}
+
+				const generator = this[GENERATOR] ?? this;
+				const existing = generator[THEMES] ?? Object.create(null);
+				generator[THEMES] = {...existing, [name]: themeStyles};
+				return this;
+			},
+		},
+		theme: {
+			enumerable: true,
+			value(name) {
+				const generator = this[GENERATOR] ?? this;
+
+				if (name === undefined) {
+					return getActiveThemeAccessor(generator);
+				}
+
+				if (name === null) {
+					generator[ACTIVE_THEME] = undefined;
+					return this;
+				}
+
+				assertValidThemeName(name);
+
+				const themes = generator[THEMES];
+				if (!themes || !Object.hasOwn(themes, name)) {
+					throw new Error(`Theme "${name}" is not defined. Use \`defineTheme\` first.`);
+				}
+
+				generator[ACTIVE_THEME] = name;
+				return this;
 			},
 		},
 	},
@@ -234,7 +316,45 @@ const applyStyle = (self, string) => {
 
 // `level` lives on the prototype rather than on each instance, so it costs nothing to construct an instance and matches how builders already expose it. It is inherited rather than own, so it does not show up in `Object.keys()`, same as for a builder.
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- The style getters must be installed at module load.
-Object.defineProperties(createChalk.prototype, {...styles, level: levelDescriptor});
+Object.defineProperties(createChalk.prototype, {
+	...styles,
+	level: levelDescriptor,
+	defineTheme: {
+		enumerable: true,
+		value(name, themeStyles) {
+			assertValidThemeName(name);
+			if (!isPlainObject(themeStyles)) {
+				throw new TypeError('Theme styles must be a plain object');
+			}
+
+			this[THEMES] = {...(this[THEMES] ?? Object.create(null)), [name]: themeStyles};
+			return this;
+		},
+	},
+	theme: {
+		enumerable: true,
+		value(name) {
+			if (name === undefined) {
+				return getActiveThemeAccessor(this);
+			}
+
+			if (name === null) {
+				this[ACTIVE_THEME] = undefined;
+				return this;
+			}
+
+			assertValidThemeName(name);
+
+			const themes = this[THEMES];
+			if (!themes || !Object.hasOwn(themes, name)) {
+				throw new Error(`Theme "${name}" is not defined. Use \`defineTheme\` first.`);
+			}
+
+			this[ACTIVE_THEME] = name;
+			return this;
+		},
+	},
+});
 
 const chalk = createChalk();
 export const chalkStderr = createChalk({level: stderrColor ? stderrColor.level : 0});

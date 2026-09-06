@@ -33,6 +33,13 @@ Return a new Chalk instance.
 */
 export const Chalk: new (options?: Options) => ChalkInstance; // eslint-disable-line @typescript-eslint/naming-convention
 
+/**
+A map from theme key names to Chalk style builders or chalk instances.
+*/
+export type ThemeStyles<TKeys extends string = string> = {
+	readonly [K in TKeys]: ChalkInstance | ((...text: unknown[]) => string);
+};
+
 export interface ChalkInstance {
 	(...text: unknown[]): string;
 
@@ -332,6 +339,49 @@ export interface ChalkInstance {
 	readonly underlineMagentaBright: this;
 	readonly underlineCyanBright: this;
 	readonly underlineWhiteBright: this;
+
+	/**
+	Register or replace a named theme.
+
+	A theme is a plain object whose values are Chalk style builders or chalk
+	instances, accessed later through `theme()` (with no argument) once a theme
+	has been activated with `theme(name)`.
+
+	@example
+	```
+	import chalk from 'chalk';
+
+	chalk.defineTheme('light', {
+		primary: chalk.blue,
+		error: chalk.red,
+	});
+
+	chalk.theme('light');
+	console.log(chalk.theme().primary('Hello'));
+	```
+	*/
+	defineTheme<TKeys extends string>(
+		name: string,
+		styles: ThemeStyles<TKeys>,
+	): this;
+
+	/**
+	Activate a named theme previously registered with `defineTheme`.
+
+	When called with no argument, returns the active theme accessor — a plain
+	object whose keys are the theme's style names. Returns `undefined` if no
+	theme has been activated.
+
+	@example
+	```
+	import chalk from 'chalk';
+
+	chalk.theme('light');
+	console.log(chalk.theme().primary('Hello'));
+	```
+	*/
+	theme(name: string): this;
+	theme(): ThemeStyles | undefined;
 }
 
 /**
